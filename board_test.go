@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"testing"
-	// "fmt"
 )
+
+func TestCheck
 
 func TestMapValues(t *testing.T) {
 	if err := load(puzzleFile); err != nil {
@@ -14,16 +16,24 @@ func TestMapValues(t *testing.T) {
 	}
 
 	// set a cell's number; replace the first 0 found with an invalid number
+	// in this case it's cell 03s
 	c := ValuesMap[0][0]
 	c.Number = 10
 
 	if err := mapValues(); err != nil {
-		if t.Logf("%s", err) == "error mapping values: invalid number 10 in cell 03"
-		t.Logf("error mapping values: %s", err)
+		if fmt.Sprintf("%s", err) == "error mapping values: invalid number 10 in cell 03" {
+			t.Logf("error mapping values: %s", err)
+		}
 	}
 }
 
-func TestSaveState(t *testing.T) {
+func TestLoad(t *testing.T) {
+	if err := load(puzzleFile); err != nil {
+		t.Errorf("error loading state file: %s", err)
+	}
+}
+
+func TestSave(t *testing.T) {
 	if err := load(puzzleFile); err != nil {
 		t.Errorf("error loading state file: %s", err)
 	}
@@ -48,6 +58,5 @@ func TestDifficulty(t *testing.T) {
 	if err := load(stateFile); err != nil {
 		t.Logf("error loading state file: %s", err)
 	}
-
 
 }

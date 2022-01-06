@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"strconv"
-	"log"
 )
 
 // Cell represents each of 81 board's cells
@@ -58,14 +58,8 @@ var stateFile = "state.json"
 // puzzleFile is where games are loaded from
 var puzzleFile = "puzzle.json"
 
-// ValuesMap holds all cells that a number appears in
-var ValuesMap map[int][]Cell
-
 // debug (log) level
 var debug bool
-
-// Board holds the current state of the sudoku puzzle
-var Board [9][9]Cell
 
 // user input
 var scanner *bufio.Scanner
@@ -75,9 +69,10 @@ func ilog(cat string, msg string, o ...interface{}) {
 
 	case "debug":
 		if debug == true {
+			m := fmt.Sprintf("%#v\n", msg) // TODO: not working as intended
 			log.Println("--- DEBUG --------------")
 			log.Println("---")
-			log.Printf("---%+v\n", msg)
+			log.Printf(m, o...)
 			log.Println("---")
 			log.Println("--- DEBUG --------------")
 		}
@@ -90,26 +85,27 @@ func ilog(cat string, msg string, o ...interface{}) {
 }
 
 // load puzzle from file
-func load(f string) error {
+func load(f string) ([][]Cell, error) {
+	var board [][]Cell
 
 	j, err := ioutil.ReadFile(f)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	err = json.Unmarshal(j, &Board)
+	err = json.Unmarshal(j, &board)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return board, nil
 }
 
-// save puzzle state
-func save() error {
-	clearCells()
+// save puzzle(i.e the board) state
+func save(board [][]Cell) error {
+	clearCells(board)
 
-	j, err := json.MarshalIndent(&Board, "", "\t")
+	j, err := json.MarshalIndent(&board, "", "\t")
 	if err != nil {
 		return err
 	}
@@ -117,7 +113,7 @@ func save() error {
 	return ioutil.WriteFile(stateFile, j, 0600)
 }
 
-// Content prints a cell's number
+// Content prints a cell's number depending on the cell's state
 // see structs for available colors
 func (c Cell) Content() string {
 	var number, color string
@@ -148,22 +144,22 @@ func (c Cell) Content() string {
 }
 
 // prints the board with the cells contents if num not zero
-func printBoard() {
+func printBoard(b [][]Cell) {
 	fmt.Printf("\n\n")
 	// START first row of boxes
 	fmt.Printf("   \033[0;2m" + "  0   1   2   3   4   5   6   7   8\n" + "\033[0m")
 	// upper border
 	fmt.Printf("   \u250F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u2513\n")
 	// first row of numbers
-	printNumberRow(0)
+	printNumberRow(0, b)
 	// first middle row
 	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// second row of numbers
-	printNumberRow(1)
+	printNumberRow(1, b)
 	// second middle row
 	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// third row of numbers
-	printNumberRow(2)
+	printNumberRow(2, b)
 	// lower border
 	fmt.Printf("   \u2523\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u252B\n")
 	// END first row of boxes
@@ -171,15 +167,15 @@ func printBoard() {
 	// REPEAT
 	// START second row of boxes (no border)
 	// first row of numbers
-	printNumberRow(3)
+	printNumberRow(3, b)
 	// first middle row
 	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// second row of numbers
-	printNumberRow(4)
+	printNumberRow(4, b)
 	// second middle row
 	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// third row of numbers
-	printNumberRow(5)
+	printNumberRow(5, b)
 	// lower border
 	fmt.Printf("   \u2523\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u252B\n")
 	// END second row of boxes
@@ -187,15 +183,15 @@ func printBoard() {
 	// START third row of boxes (no border)
 
 	// first row of numbers
-	printNumberRow(6)
+	printNumberRow(6, b)
 	// first middle row
 	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// second row of numbers
-	printNumberRow(7)
+	printNumberRow(7, b)
 	// second middle row
 	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// third row of numbers
-	printNumberRow(8)
+	printNumberRow(8, b)
 	// lower border
 	fmt.Printf("   \u2517\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u253B\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u253B\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u251B\n")
 	// END third row of boxes
@@ -205,26 +201,26 @@ func printBoard() {
 
 // print each row between cell borders separately
 // so the cell's numbers are printed (with color)
-// replace 2502 with 250A or 2506 for vertical lines as cells separators
-func printNumberRow(n int) {
-	// print row number n in gray color
-	fmt.Printf(" \033[0;2m%d\033[0m", n)
+// replace 2502 with 250A or 2506 for vertical lines
+func printNumberRow(row int, board [][]Cell) {
+	// print row number row in gray color
+	fmt.Printf(" \033[0;2m%d\033[0m", row)
 
 	// this one line printed; broken into three for better readability
-	fmt.Printf(" \u2503 %s \u2502 %s \u2502 %s \u2503", Board[n][0].Content(), Board[n][1].Content(), Board[n][2].Content())
-	fmt.Printf(" %s \u2502 %s \u2502 %s \u2503", Board[n][3].Content(), Board[n][4].Content(), Board[n][5].Content())
-	fmt.Printf(" %s \u2502 %s \u2502 %s \u2503\n", Board[n][6].Content(), Board[n][7].Content(), Board[n][8].Content())
+	fmt.Printf(" \u2503 %s \u2502 %s \u2502 %s \u2503", board[row][0].Content(), board[row][1].Content(), board[row][2].Content())
+	fmt.Printf(" %s \u2502 %s \u2502 %s \u2503", board[row][3].Content(), board[row][4].Content(), board[row][5].Content())
+	fmt.Printf(" %s \u2502 %s \u2502 %s \u2503\n", board[row][6].Content(), board[row][7].Content(), board[row][8].Content())
 }
 
-// validates given puzzle and makes a map of numbers in cells
-func mapValues() error {
-	ValuesMap = make(map[int][]Cell)
+// mapValues makes a map of numbers in cells
+func mapValues(board [][]Cell) map[int][]Cell {
+	m := make(map[int][]Cell)
 
 	// iterate over all cells
 	for row := 0; row < 9; row++ {
 		for col := 0; col < 9; col++ {
 			// current cell
-			c := Board[row][col]
+			c := board[row][col]
 
 			// initial number in this cell
 			number := c.Number
@@ -234,41 +230,25 @@ func mapValues() error {
 			c.row = row
 			c.col = col
 
-			// check for invalid numbers
-			// for empty cells we use 0
-			if number < 0 || number > 9 {
-				return fmt.Errorf("invalid number %d in cell %d%d", number, c.row, c.col)
-			}
-
-			// check if initial number is valid for this cell
-			// puzzleErrors = c.checkCell(number)
-
-			// register this appearance of this number
-			ValuesMap[number] = append(ValuesMap[number], c)
+			// store this appearance of this number
+			m[number] = append(m[number], c)
 		}
 	}
 
-	// if len(puzzleErrors) > 0 {
-	// 	for i := 0; i < len(puzzleErrors); i++ {
-	// 		// ilog("info", puzzleErrors[i])
-	// 		fmt.Println(puzzleErrors[i])
-	// 	}
-	// }
-
-	return nil
+	return m
 }
 
 // difficulty measured by the count of 0's;
 // > 35 considered easy, < 25 hard
-func difficulty() string {
-	if len(ValuesMap[0]) < 25 {
+func difficulty(m map[int][]Cell) string {
+	if len(m[0]) < 25 {
 		return "easy"
 	}
-	if len(ValuesMap[0]) > 30 {
+	if len(m[0]) > 30 {
 		return "hard"
 	}
 
-	return fmt.Sprintf("empty cells: %d", len(ValuesMap[0]))
+	return fmt.Sprintf("empty cells: %d", len(m[0]))
 }
 
 func clearConsole() {
@@ -276,85 +256,124 @@ func clearConsole() {
 }
 
 // clear state from all cells;
-// Number, row, col and marks remain 
-func clearCells() {
-	for i := 0; i < 9; i++ {
-		for j := 0; j < 9; j++ {
-			Board[i][j].invalid = false
-			Board[i][j].active = false
-			Board[i][j].selected = false
-			Board[i][j].candid = false
-			Board[i][j].solved = false
-			Board[i][j].blink = false
+// Number, row, col and marks remain
+func clearCells(board [][]Cell) {
+	for row := 0; row < 9; row++ {
+		for col := 0; col < 9; col++ {
+			board[row][col].invalid = false
+			board[row][col].active = false
+			board[row][col].selected = false
+			board[row][col].candid = false
+			board[row][col].solved = false
+			board[row][col].blink = false
 		}
 	}
 }
 
 // get user input
 func getInput() string {
-	var option string
-
-	fmt.Printf("\tOptions: (n)ew, (r)esume, (q)uit\n")
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Printf("\tOr a number: ")
+		fmt.Printf("\tYour choice: ")
 		scanner.Scan()
-		option = scanner.Text()
+		option := scanner.Text()
 		return option
 	}
 }
 
+func getNumber() int {
+	scanner := bufio.NewScanner(os.Stdin)
+	var num int
+	for {
+		fmt.Print("Enter a number or x to exit: ")
+		scanner.Scan()
+
+		input := scanner.Text()
+		ilog("debug", "got %#+v", input)
+		if input == "x" {
+			num = 0
+			break
+		}
+
+		i, err := strconv.Atoi(input)
+		if err != nil {
+			fmt.Printf("Must enter a number from 1 to 9\n")
+			continue
+		}
+		if i > 9 || i < 1 {
+			// fmt.Printf("\n")
+			fmt.Print("Must enter a number from 1 to 9\n")
+			continue
+		}
+		num = i
+		break
+	}
+	return num
+}
+
+func play(board [][]Cell) {
+	printBoard(board)
+	for {
+		num := getNumber()
+		ilog("debug", "got %#+v", num)
+		if num == 0 {
+			err := save(board)
+			if err != nil {
+				ilog("error", "error saving: %s", err)
+			}
+			break // TODO: how to break loop and return to main?
+		}
+
+		// check number
+		// check in row
+		// check in column
+		// check in 9-cell box
+		// cross hatch
+		// set board's state
+		printBoard(board)
+	}
+}
+
+func quit(board [][]Cell) {
+
+}
+
 func main() {
-	var input string
+	debug = true
+
 	// main loop
-	input = getInput()
+	fmt.Printf("\tOptions: (n)ew, (r)esume, e(x)it\n")
+	input := getInput()
 	for {
 		switch input {
 		case "n":
 			// load puzzle from puzzle.json file
-			if err := load(puzzleFile); err != nil {
+			board, err := load(puzzleFile)
+			if err != nil {
 				panic(err)
 			}
-			// make a map of existing numbers in cells
-			if err := mapValues(); err != nil {
-				panic(err)
-			}
-			ilog("info", "\n\tNew puzzle, difficulty: %s\n", difficulty())
-			printBoard()
-			input = getInput()
+			play(board)
+			// // make a map of existing numbers in cells
+			// mapv := mapValues(board)
+			// ilog("info", "\tNew puzzle, difficulty: %s\n", difficulty(mapv))
+			// printBoard(board)
+			// input = getInput()
 
 		case "r":
 			// load previously saved puzzle in state.json
-			if err := load(stateFile); err != nil {
+			board, err := load(stateFile)
+			if err != nil {
 				panic(err)
 			}
-			// make a map of existing numbers in cells
-			if err := mapValues(); err != nil {
-				panic(err)
-			}
-			printBoard()
-			input = getInput()
+			play(board)
 
-		case "q":
-			// save puzzle state
-			if err := save(); err != nil {
-				ilog("error", "error saving puzzle: %s", err)
-			}
-			ilog("info", "puzzle saved at %s.", stateFile)
+		case "x":
 			return // exit program
 
 		default:
-			i, err := strconv.Atoi(input)
-			if err != nil {
-				input = getInput()
-			}
-			if i > 9 || i < 1 {
-				// fmt.Printf("\n")
-				fmt.Print("Must enter a number from 1 to 9\n")
-				input = getInput()
-			}
-			ilog("info", "chose %d", i)
+			fmt.Printf("\tOptions: (n)ew, (r)esume, e(x)it\n")
 			input = getInput()
+
 		}
 	}
 }
