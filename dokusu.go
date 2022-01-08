@@ -8,6 +8,8 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"math/rand"
+	"time"
 )
 
 // Cell represents each of 81 board's cells
@@ -84,25 +86,123 @@ func ilog(cat string, msg string, o ...interface{}) {
 	}
 }
 
+// generate a box (9 cells range)
+func genBox(board [9][9]Cell, cell Cell) [9][9]Cell {
+	ints := []int{1,2,3,4,5,6,7,8,9}
+	ints = shuffle(ints)
+	i := 0
+	for row := cell.row; row < cell.row + 3; row++ {
+		for col := cell.col; col < cell.col + 3; col++ {
+			board[row][col].Number = ints[i]
+			i++
+		}
+	}
+
+	return board
+}
+
+// add a number as a used (not available)
+// this needed because a used number for a cell
+// should not appear more than once
+func addAsUsed(used []int, n int) []int {
+	if len(used) == 0 {
+		fmt.Printf("adding %d\n", n)
+		return append(used, n)
+	}
+
+	for i := 0; i < len(used); i++ {
+		fmt.Printf("checking %d with %d: ", n, used[i])
+		if used[i] == n {
+			fmt.Printf("skipping %d\n", n)
+			return used
+		}
+		used = append(used, n)
+		fmt.Printf("adding %d, used: %#+v\n", n, used)
+	}
+	return used
+}
+
+// find used numbers (not available) for a cell
+func findUsed(board [9][9]Cell, cell Cell) []int {
+	var used []int
+	if board[cell.row][cell.col].Number > 0 {
+		ilog("info", "cell [%d%d] not empty", cell.row, cell.col)
+		// TODO: return error when cell not empty
+		return used
+	}
+
+	// check row first
+	for i := 0; i < 9; i++ {
+		if board[cell.row][i].Number > 0 {
+			// TODO: a used number may be added more than once
+			// is that ok?
+			used = addAsUsed(used, board[cell.row][i].Number)
+		}
+	}
+
+	// check column
+	for i := 0; i < 9; i++ {
+		if board[i][cell.col].Number > 0 {
+			used = addAsUsed(used, board[i][cell.col].Number)
+		}
+	}
+
+	// finally check box
+	brow, bcol := box(cell.row, cell.col)
+	for i := brow; i < brow + 3; i++ {
+		for j := bcol; j < bcol + 3; j++ {
+			if board[i][j].Number > 0 {
+				used = addAsUsed(used, board[i][j].Number)
+			}
+		}
+	}
+
+	return used
+}
+
+// find free (available) numbers for a cell
+func findFree(board [9][9]Cell, cell Cell, used []int) []int {
+	var free []int
+
+	for i := 1; i < 10; i++ {
+		out:
+		for j := 0; j < len(used); j++ {
+			ilog("debug", "checking %d against used %d\n", i, used[j])
+			if i == used[j] {
+				ilog("debug", "%d is equal to used %d, check next\n", i, used[j])
+				break out
+			}
+			if j == len(used)-1 {
+				ilog("debug", "reached end of used numbers, add this %d to free\n", i)
+				free = append(free, i)
+				// board[0][3].Number = i
+				// used = append(used, i)
+				continue
+			}
+		}
+	}
+	return free
+}
+
 // load puzzle from file
-func load(f string) ([][]Cell, error) {
-	var board [][]Cell
+func load(f string) ([9][9]Cell, error) {
+	var board [9][9]Cell
 
 	j, err := ioutil.ReadFile(f)
 	if err != nil {
-		return nil, err
+		return board, err
 	}
 
 	err = json.Unmarshal(j, &board)
 	if err != nil {
-		return nil, err
+		return board, err
 	}
 
 	return board, nil
 }
 
 // save puzzle(i.e the board) state
-func save(board [][]Cell) error {
+func save(board [9][9]Cell) error {
 	clearCells(board)
 
 	j, err := json.MarshalIndent(&board, "", "\t")
@@ -111,6 +211,15 @@ func save(board [][]Cell) error {
 	}
 
 	return ioutil.WriteFile(stateFile, j, 0600)
+}
+
+// shuffle a slice of ints
+func shuffle(ints []int) []int {
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(ints), func(i, j int) {
+		ints[i], ints[j] = ints[j], ints[i]
+	})
+	return ints
 }
 
 // Content prints a cell's number depending on the cell's state
@@ -144,7 +253,7 @@ func (c Cell) Content() string {
 }
 
 // prints the board with the cells contents if num not zero
-func print(b [][]Cell) {
+func print(b [9][9]Cell) {
 	fmt.Printf("\n\n")
 	// START first row of boxes
 	fmt.Printf("   \033[0;2m" + "  0   1   2   3   4   5   6   7   8\n" + "\033[0m")
@@ -202,7 +311,7 @@ func print(b [][]Cell) {
 // print each row between cell borders separately
 // so the cell's numbers are printed (with color)
 // replace 2502 with 250A or 2506 for vertical lines
-func printRow(row int, board [][]Cell) {
+func printRow(row int, board [9][9]Cell) {
 	// print row number row in gray color
 	fmt.Printf(" \033[0;2m%d\033[0m", row)
 
@@ -213,7 +322,7 @@ func printRow(row int, board [][]Cell) {
 }
 
 // mapValues makes a map of numbers in cells
-func mapValues(board [][]Cell) map[int][]Cell {
+func mapValues(board [9][9]Cell) map[int][]Cell {
 	m := make(map[int][]Cell)
 
 	// iterate over all cells
@@ -257,7 +366,7 @@ func clearConsole() {
 
 // clear state from all cells;
 // Number, row, col and marks remain
-func clearCells(board [][]Cell) {
+func clearCells(board [9][9]Cell) {
 	for row := 0; row < 9; row++ {
 		for col := 0; col < 9; col++ {
 			board[row][col].invalid = false
@@ -303,7 +412,49 @@ func getNumber() int {
 	return num
 }
 
-func play(board [][]Cell) {
+func checkRow(board [9][9]Cell, num int, row int) interface{} {
+	for col := 0; col < 9; col++ {
+		if board[row][col].Number == num {
+			return fmt.Sprintf("number %d found in cell [%d%d]", num, row, col)
+		}
+	}
+	return nil
+}
+
+func checkCol(board [9][9]Cell, num int, col int) interface{} {
+	for row := 0; row < 9; row++ {
+		if board[row][col].Number == num {
+			return fmt.Sprintf("number %d found in cell [%d%d]", num, row, col)
+		}
+	}
+	return nil
+}
+
+// box returns the 9-cell range (box) that a cell belongs in
+// i.e the upper left cell's row and column
+func box(row, col int) (int, int) {
+	crd3 := row / 3
+	ccd3 := col / 3
+
+	srow := crd3 * 3
+	scol := ccd3 * 3
+
+	return srow, scol
+}
+
+func checkBox(board [9][9]Cell, num int, row int, col int) interface{} {
+	srow, scol := box(row, col)
+	for row := srow; row < srow+3; row++ {
+		for col := scol; col < scol+3; col++ {
+			if board[row][col].Number == num {
+				return fmt.Sprintf("number %d found in cell [%d%d]", num, row, col)
+			}
+		}
+	}
+	return nil
+}
+
+func play(board [9][9]Cell) {
 	print(board)
 	for {
 		num := getNumber()
@@ -321,10 +472,6 @@ func play(board [][]Cell) {
 		// set board's state
 		print(board)
 	}
-}
-
-func quit(board [][]Cell) {
-
 }
 
 func main() {
