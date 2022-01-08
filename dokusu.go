@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"strconv"
-	"math/rand"
 	"time"
 )
 
@@ -88,11 +88,11 @@ func ilog(cat string, msg string, o ...interface{}) {
 
 // generate a box (9 cells range)
 func genBox(board [9][9]Cell, cell Cell) [9][9]Cell {
-	ints := []int{1,2,3,4,5,6,7,8,9}
+	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 	i := 0
-	for row := cell.row; row < cell.row + 3; row++ {
-		for col := cell.col; col < cell.col + 3; col++ {
+	for row := cell.row; row < cell.row+3; row++ {
+		for col := cell.col; col < cell.col+3; col++ {
 			board[row][col].Number = ints[i]
 			i++
 		}
@@ -106,19 +106,19 @@ func genBox(board [9][9]Cell, cell Cell) [9][9]Cell {
 // should not appear more than once
 func addAsUsed(used []int, n int) []int {
 	if len(used) == 0 {
-		fmt.Printf("adding %d\n", n)
+		ilog("debug", "adding %d\n", n)
 		return append(used, n)
 	}
 
 	for i := 0; i < len(used); i++ {
-		fmt.Printf("checking %d with %d: ", n, used[i])
+		ilog("debug", "checking %d with %d: ", n, used[i])
 		if used[i] == n {
-			fmt.Printf("skipping %d\n", n)
+			ilog("debug", "skipping %d\n", n)
 			return used
 		}
-		used = append(used, n)
-		fmt.Printf("adding %d, used: %#+v\n", n, used)
 	}
+	used = append(used, n)
+	ilog("debug", "adding %d, used: %#+v\n", n, used)
 	return used
 }
 
@@ -127,15 +127,20 @@ func findUsed(board [9][9]Cell, cell Cell) []int {
 	var used []int
 	if board[cell.row][cell.col].Number > 0 {
 		ilog("info", "cell [%d%d] not empty", cell.row, cell.col)
-		// TODO: return error when cell not empty
+		return used
+	}
+	if cell.row > 9 || cell.row < 0 {
+		ilog("error", "not a valid cell: [%d%d]", cell.row, cell.col)
+		return used
+	}
+	if cell.col > 9 || cell.col < 0 {
+		ilog("error", "not a valid cell: [%d%d]", cell.row, cell.col)
 		return used
 	}
 
 	// check row first
 	for i := 0; i < 9; i++ {
 		if board[cell.row][i].Number > 0 {
-			// TODO: a used number may be added more than once
-			// is that ok?
 			used = addAsUsed(used, board[cell.row][i].Number)
 		}
 	}
@@ -149,8 +154,8 @@ func findUsed(board [9][9]Cell, cell Cell) []int {
 
 	// finally check box
 	brow, bcol := box(cell.row, cell.col)
-	for i := brow; i < brow + 3; i++ {
-		for j := bcol; j < bcol + 3; j++ {
+	for i := brow; i < brow+3; i++ {
+		for j := bcol; j < bcol+3; j++ {
 			if board[i][j].Number > 0 {
 				used = addAsUsed(used, board[i][j].Number)
 			}
@@ -165,7 +170,7 @@ func findFree(board [9][9]Cell, cell Cell, used []int) []int {
 	var free []int
 
 	for i := 1; i < 10; i++ {
-		out:
+	out:
 		for j := 0; j < len(used); j++ {
 			ilog("debug", "checking %d against used %d\n", i, used[j])
 			if i == used[j] {
@@ -175,8 +180,6 @@ func findFree(board [9][9]Cell, cell Cell, used []int) []int {
 			if j == len(used)-1 {
 				ilog("debug", "reached end of used numbers, add this %d to free\n", i)
 				free = append(free, i)
-				// board[0][3].Number = i
-				// used = append(used, i)
 				continue
 			}
 		}

@@ -7,7 +7,7 @@ import (
 
 func TestRandRow(t *testing.T) {
 	var board [9][9]Cell
-	ints := []int{1,2,3,4,5,6,7,8,9}
+	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
 	// populate a row
@@ -19,7 +19,7 @@ func TestRandRow(t *testing.T) {
 	// check row
 	for col := 0; col < 9; col++ {
 		got := board[0][col].Number
-		if got > 9 || got < 1 { // this never happens 
+		if got > 9 || got < 1 { // this never happens
 			t.Fail()
 			t.Logf("not a valid number: %d", got)
 			board[0][col].invalid = true
@@ -30,7 +30,7 @@ func TestRandRow(t *testing.T) {
 
 func TestRandColumn(t *testing.T) {
 	var board [9][9]Cell
-	ints := []int{1,2,3,4,5,6,7,8,9}
+	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
 	// populate column 5
@@ -43,9 +43,8 @@ func TestRandColumn(t *testing.T) {
 
 func TestGenBox(t *testing.T) {
 	var board [9][9]Cell
-	ints := []int{1,2,3,4,5,6,7,8,9}
+	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
-
 
 	// populate first box
 	cell := Cell{row: 0, col: 0}
@@ -62,7 +61,7 @@ func TestGenBox(t *testing.T) {
 
 func TestFindUsed(t *testing.T) {
 	var board [9][9]Cell
-	ints := []int{1,2,3,4,5,6,7,8,9}
+	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
 	// populate first box
@@ -80,11 +79,17 @@ func TestFindUsed(t *testing.T) {
 	used := findUsed(board, c)
 	print(board)
 	t.Logf("used numbers (not available) for [%d%d], %#+v", c.row, c.col, used)
+
+	// for i := 0; i < len(used); i++ {
+	// 	for j := 0; j < len(used); j++ {
+	// 		if
+	// 	}
+	// }
 }
 
 func TestFindFree(t *testing.T) {
 	var board [9][9]Cell
-	ints := []int{1,2,3,4,5,6,7,8,9}
+	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
 	// populate first box
@@ -97,26 +102,47 @@ func TestFindFree(t *testing.T) {
 	c = Cell{row: 6, col: 6}
 	board = genBox(board, c)
 
-	// find used numbers (not available) for this cell
-	c = Cell{row: 0, col: 3}
-	used := findUsed(board, c)
-	print(board)
-	t.Logf("used numbers (not available) for [%d%d], %#+v", c.row, c.col, used)
-
-	free := findFree(board, c, used)
-	t.Logf("free numbers (available) for [%d%d], %#+v", c.row, c.col, free)
-
-	if len(used) + len(free) != 9 {
-		t.Errorf("used+free equals to %d", len(used)+len(free))
+	// cells to check for free (available) numbers
+	var tests = []struct {
+		row  int
+		col  int
+		want int
+	}{
+		{0, 0, 0},
+		{1, 0, 0},
+		{2, 0, 0},
+		{0, 1, 0},
+		{1, 2, 0},
+		{2, 3, 9},
+		{3, 3, 0},
+		{3, 4, 0},
+		{3, 5, 0},
+		{3, 6, 9},
+		{4, 7, 9},
+		{5, 0, 9},
+		{6, 1, 9},
+		{7, 1, 9},
+		{8, 1, 9},
+		{8, 7, 0},
+		{8, 8, 0},
+		{5, 5, 0},
+		{8, 6, 0},
 	}
 
-	for i := 0; i < len(used); i++ {
-		for j := 0; j < len(free); j++ {
-			if used[i] == free[j] {
-				t.Errorf("used %d found in free", used[i])
+	for _, test := range tests {
+		t.Logf("testing cell [%d%d]", test.row, test.col)
+		used := findUsed(board, Cell{row: test.row, col: test.col})
+		free := findFree(board, Cell{row: test.row, col: test.col}, used)
+		if len(used)+len(free) != test.want {
+			t.Errorf("used+free equals to %d", len(used)+len(free))
+		}
+		for i := 0; i < len(used); i++ {
+			for j := 0; j < len(free); j++ {
+				if used[i] == free[j] {
+					t.Errorf("used %d found in free", used[i])
+				}
 			}
 		}
-		
 	}
 }
 
