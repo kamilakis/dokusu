@@ -59,48 +59,69 @@ func TestGenBox(t *testing.T) {
 	print(board)
 }
 
-func TestFindUsed(t *testing.T) {
+// complete first three boxes 
+func gen3boxes() [9][9]Cell {
 	var board [9][9]Cell
 	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
-	// populate first box
+	// complete first box
 	c := Cell{row: 0, col: 0}
 	board = genBox(board, c)
-	// populate second box
+	// complete second box
 	c = Cell{row: 3, col: 3}
 	board = genBox(board, c)
-	// populate third box
+	// complete third box
 	c = Cell{row: 6, col: 6}
 	board = genBox(board, c)
 
+	return board
+}
+
+func TestGenCell(t *testing.T) {
+	board := gen3boxes()
+	print(board)
+	// proceed one cell at a time
+	for row := 0; row < 9; row++ {
+		for col := 0; col < 9; col++ {
+			// c := &board[row][col]
+			if board[row][col].Number == 0 {
+				used := findUsed(board, Cell{row:row,col:col})
+				free := findFree(board, Cell{row:row,col:col}, used)
+				t.Logf("free numbers for [%d%d]: %#v", row, col, free)
+				// set cell's number with the first free
+				board[row][col].Number = free[0]
+				print(board)
+				t.Logf("set number %d for [%d%d]\n", free[0], row, col)
+				if col == 8 {
+					t.Logf("---------- row %d complete\n", row)
+				}
+				continue
+			}
+			t.Logf("number %d already set in [%d%d]\n", board[row][col].Number, row, col)
+			if col == 8 {
+				t.Logf("+++ column %d complete\n", col)
+			}
+		}
+		if row == 8 {
+			t.Logf("---------- row %d complete\n", row)
+		}
+	}
+	print(board)
+}
+
+func TestFindUsed(t *testing.T) {
+	board := gen3boxes()
+
 	// find used numbers (not available) for this cell
-	c = Cell{row: 5, col: 2}
+	c := Cell{row: 5, col: 2}
 	used := findUsed(board, c)
 	print(board)
 	t.Logf("used numbers (not available) for [%d%d], %#+v", c.row, c.col, used)
-
-	// for i := 0; i < len(used); i++ {
-	// 	for j := 0; j < len(used); j++ {
-	// 		if
-	// 	}
-	// }
 }
 
 func TestFindFree(t *testing.T) {
-	var board [9][9]Cell
-	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
-	ints = shuffle(ints)
-
-	// populate first box
-	c := Cell{row: 0, col: 0}
-	board = genBox(board, c)
-	// populate second box
-	c = Cell{row: 3, col: 3}
-	board = genBox(board, c)
-	// populate third box
-	c = Cell{row: 6, col: 6}
-	board = genBox(board, c)
+	board := gen3boxes()
 
 	// cells to check for free (available) numbers
 	var tests = []struct {
@@ -131,8 +152,9 @@ func TestFindFree(t *testing.T) {
 
 	for _, test := range tests {
 		t.Logf("testing cell [%d%d]", test.row, test.col)
-		used := findUsed(board, Cell{row: test.row, col: test.col})
-		free := findFree(board, Cell{row: test.row, col: test.col}, used)
+		c := Cell{row: test.row, col: test.col}
+		used := findUsed(board, c)
+		free := findFree(board, c, used)
 		if len(used)+len(free) != test.want {
 			t.Errorf("used+free equals to %d", len(used)+len(free))
 		}
@@ -231,20 +253,45 @@ func TestCheckBox(t *testing.T) {
 	}
 }
 
-// TODO
 func TestMapValues(t *testing.T) {
-	board, err := load(puzzleFile)
-	if err != nil {
-		t.Errorf("error loading puzzle file: %s", err)
+	var board [9][9]Cell
+	var tests = []struct {
+		row int
+		col int
+		set int
+	}{
+		{5, 3, 7},
+		{0, 8, 5},
+		{4, 4, 3},
+		{2, 5, 2},
+		{1, 0, 6},
+		{5, 3, 8},
+		{5, 1, 1},
+		{8, 1, 4},
+		{6, 3, 2},
 	}
-	vmap := mapValues(board)
-
-	// set a cell's number; replace the first 0 found with an invalid number
-	c := vmap[0][0]
-	c.Number = 10
-
-	vmap = mapValues(board)
-	// TODO: test here
+	for _, test := range tests {
+		t.Logf("=== start test %#v", test)
+		// set cell's number
+		board[test.row][test.col].Number = test.set
+		// make new values map of board
+		vmap := mapValues(board)
+		t.Logf("values map for %d: %#+v\n", test.set, vmap[test.set])
+		// expect to find the cell set on the vmap
+		for i := 0; i < len(vmap[test.set]); i++ {
+			if vmap[test.set][i].Number == test.set && 
+				vmap[test.set][i].row == test.row &&
+				vmap[test.set][i].col == test.col {
+				t.Logf("number %d for [%d%d] found in %#v\n", test.set, test.row, test.col, vmap[test.set][i])
+				break
+			}
+			// reached the end of the vmap for set number
+			if i == len(vmap[test.set])-1 {
+				t.Errorf("%d not found for cell [%d%d]", test.set, test.row, test.col)
+			}
+		}
+		t.Logf("--- end test %#v", test)
+	}
 }
 
 func TestSaveState(t *testing.T) {
