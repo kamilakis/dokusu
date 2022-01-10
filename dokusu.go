@@ -86,7 +86,7 @@ func ilog(cat string, msg string, o ...interface{}) {
 	}
 }
 
-// generate a box (9 cells range)
+// generate randomly a 3x3 box (9 cells range)
 func genBox(board [9][9]Cell, cell Cell) [9][9]Cell {
 	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
@@ -101,24 +101,101 @@ func genBox(board [9][9]Cell, cell Cell) [9][9]Cell {
 	return board
 }
 
+// complete first three boxes 
+func gen3boxes() [9][9]Cell {
+	var board [9][9]Cell
+	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
+	ints = shuffle(ints)
+
+	// complete first box
+	c := Cell{row: 0, col: 0}
+	board = genBox(board, c)
+	// complete second box
+	c = Cell{row: 3, col: 3}
+	board = genBox(board, c)
+	// complete third box
+	c = Cell{row: 6, col: 6}
+	board = genBox(board, c)
+
+	return board
+}
+
+// recursively fill a 3x3 box
+// find free numbers available for each cell
+// if none found start again with next free number
+func fillBox(b [9][9]Cell, c Cell, t int) [9][9]Cell {
+	if t == 0 && b[c.row][c.col].Number > 0 {
+		ilog("error", "[%d%d] has number: %d\n", c.row, c.col, b[c.row][c.col].Number)
+		return b
+	}
+
+	if t > 0 {
+		// recursive call, previous try failed, reset to 0
+		ilog("info", "reset box[%d%d]", c.row, c.col)
+		for i := c.row; i < c.row+3; i++ {
+			for j := c.col; j < c.col+3; j++ {
+				b[i][j].Number = 0
+			}
+		}
+	}
+
+out:
+	for i := c.row; i < c.row+3; i++ {
+		for j := c.col; j < c.col+3; j++ {
+			used := findUsed(b, Cell{row: i, col: j})
+			free := findFree(b, Cell{row: i, col: j}, used)
+			if len(free) == 0 {
+				if t >
+				t++
+				ilog("info", "0 free numbers for [%d%d], re-start\n", i, j)
+				return fillBox(b, c, t)
+			}
+			
+			var trynew int
+			if t > 0 && i == c.row && j == c.col {
+				if t > len(free) -1 {
+					ilog("info", "no more tries for [%d%d]\n", i, j)
+					break out
+				}
+				// try different start
+				trynew = free[t]
+			} else {
+				trynew = free[0]
+			}
+			b[i][j].Number = trynew
+			ilog("info", "put %d in [%d%d] %#v\n", trynew, i, j, free)
+		}
+	}
+
+	// re-generate first three diagonal boxes
+	if b[c.row][c.col].Number == 0 {
+		ilog("info", "re-generating first three diagonal boxes\n")
+		b = gen3boxes()
+		t = 0
+		return fillBox(b, c, t)
+	}
+
+	return b
+}
+
 // add a number as a used (not available)
 // this needed because a used number for a cell
 // should not appear more than once
 func addAsUsed(used []int, n int) []int {
 	if len(used) == 0 {
-		ilog("debug", "adding %d\n", n)
+		// ilog("debug", "adding %d\n", n)
 		return append(used, n)
 	}
 
 	for i := 0; i < len(used); i++ {
-		ilog("debug", "checking %d with %d: ", n, used[i])
+		// ilog("debug", "checking %d with %d: ", n, used[i])
 		if used[i] == n {
-			ilog("debug", "skipping %d\n", n)
+			// ilog("debug", "skipping %d\n", n)
 			return used
 		}
 	}
 	used = append(used, n)
-	ilog("debug", "adding %d, used: %#+v\n", n, used)
+	// ilog("debug", "adding %d, used: %#+v\n", n, used)
 	return used
 }
 
@@ -172,13 +249,13 @@ func findFree(board [9][9]Cell, cell Cell, used []int) []int {
 	for i := 1; i < 10; i++ {
 	out:
 		for j := 0; j < len(used); j++ {
-			ilog("debug", "checking %d against used %d\n", i, used[j])
+			// ilog("debug", "checking %d against used %d\n", i, used[j])
 			if i == used[j] {
-				ilog("debug", "%d is equal to used %d, check next\n", i, used[j])
+				// ilog("debug", "%d is equal to used %d, check next\n", i, used[j])
 				break out
 			}
 			if j == len(used)-1 {
-				ilog("debug", "reached end of used numbers, add this %d to free\n", i)
+				// ilog("debug", "reached end of used numbers, add this %d to free\n", i)
 				free = append(free, i)
 				continue
 			}

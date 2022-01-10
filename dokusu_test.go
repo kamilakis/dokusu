@@ -59,23 +59,42 @@ func TestGenBox(t *testing.T) {
 	print(board)
 }
 
-// complete first three boxes 
-func gen3boxes() [9][9]Cell {
-	var board [9][9]Cell
-	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
-	ints = shuffle(ints)
+func TestComplete(t *testing.T) {
+	debug = false
+	board := gen3boxes()
+	print(board)
 
-	// complete first box
-	c := Cell{row: 0, col: 0}
-	board = genBox(board, c)
-	// complete second box
-	c = Cell{row: 3, col: 3}
-	board = genBox(board, c)
-	// complete third box
+	// fourth box starting from [03]
+	// this one cannot be generated randomly
+	c := Cell{row: 0, col: 3}
+	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
+	board = fillBox(board, c, 0)
+	print(board)
+
+	// fifth box starting from [06]
+	// this one cannot be generated randomly
+	c = Cell{row: 0, col: 6}
+	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
+	board = fillBox(board, c, 0)
+
+	c = Cell{row: 3, col: 0}
+	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
+	board = fillBox(board, c, 0)
+
+	c = Cell{row: 3, col: 6}
+	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
+	board = fillBox(board, c, 0)
+
+	c = Cell{row: 6, col: 0}
+	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
+	board = fillBox(board, c, 0)
+
 	c = Cell{row: 6, col: 6}
-	board = genBox(board, c)
+	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
+	board = fillBox(board, c, 0)
 
-	return board
+
+	print(board)
 }
 
 func TestGenCell(t *testing.T) {
