@@ -17,6 +17,7 @@ type Cell struct {
 	Number   int
 	row      int
 	col      int
+	color    string
 	invalid  bool // those have a red or green color
 	active   bool
 	selected bool  // used for cross-hatching
@@ -25,6 +26,9 @@ type Cell struct {
 	solved   bool
 	blink    bool
 }
+
+// Board 
+type Board [9][9]Cell
 
 const (
 	cReset      = "0m"
@@ -86,52 +90,93 @@ func ilog(cat string, msg string, o ...interface{}) {
 	}
 }
 
+// load puzzle from file
+func (b *Board) load(f string) error {
+	j, err := ioutil.ReadFile(f)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(j, b)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// save puzzle(i.e the board) state
+func (b *Board) save() error {
+	b.clear()
+
+	j, err := json.MarshalIndent(b, "", "\t")
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(stateFile, j, 0600)
+}
+
+// shuffle a slice of ints
+func shuffle(ints []int) []int {
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(ints), func(i, j int) {
+		ints[i], ints[j] = ints[j], ints[i]
+	})
+	return ints
+}
+
 // generate randomly a 3x3 box (9 cells range)
-func genBox(board [9][9]Cell, cell Cell) [9][9]Cell {
+func (b *Board) genBox(c Cell) {
+	ilog("debug", "show *Board b: %#+v", b)
 	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 	i := 0
-	for row := cell.row; row < cell.row+3; row++ {
-		for col := cell.col; col < cell.col+3; col++ {
-			board[row][col].Number = ints[i]
+	for row := c.row; row < c.row+3; row++ {
+		for col := c.col; col < c.col+3; col++ {
+			b[row][col].Number = ints[i]
 			i++
 		}
 	}
-
-	return board
 }
 
-// complete first three boxes 
-func gen3boxes() [9][9]Cell {
-	var board [9][9]Cell
+// generate randomly first three 3x3 boxes
+func (b *Board) gen3boxes() {
 	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
-	// complete first box
 	c := Cell{row: 0, col: 0}
-	board = genBox(board, c)
-	// complete second box
+	b.genBox(c)
 	c = Cell{row: 3, col: 3}
-	board = genBox(board, c)
-	// complete third box
+	b.genBox(c)
 	c = Cell{row: 6, col: 6}
-	board = genBox(board, c)
+	b.genBox(c)
+}
 
-	return board
+// set value for a cell
+func (b *Board) setValue(r int, c int, v int) {
+	b[r][c].Number = v
+	ilog("info", " [%d%d] set to %d\n", r, c, v)
 }
 
 // recursively fill a 3x3 box
 // find free numbers available for each cell
 // if none found start again with next free number
-func fillBox(b [9][9]Cell, c Cell, t int) [9][9]Cell {
+func (b *Board) fillBox(c Cell, t int, seq []int) {
+	// stop madness
+	if t > 10 {
+		ilog("info", "cannot fill; quitting.")
+		return
+	}
+
 	if t == 0 && b[c.row][c.col].Number > 0 {
 		ilog("error", "[%d%d] has number: %d\n", c.row, c.col, b[c.row][c.col].Number)
-		return b
+		return
 	}
 
 	if t > 0 {
 		// recursive call, previous try failed, reset to 0
-		ilog("info", "reset box[%d%d]", c.row, c.col)
+		seq = []int{}
 		for i := c.row; i < c.row+3; i++ {
 			for j := c.col; j < c.col+3; j++ {
 				b[i][j].Number = 0
@@ -139,102 +184,94 @@ func fillBox(b [9][9]Cell, c Cell, t int) [9][9]Cell {
 		}
 	}
 
-out:
+	// out:
 	for i := c.row; i < c.row+3; i++ {
+		col:
 		for j := c.col; j < c.col+3; j++ {
-			used := findUsed(b, Cell{row: i, col: j})
-			free := findFree(b, Cell{row: i, col: j}, used)
+			c := b[i][j]
+			used := b.findUsed(c)
+			free := b.findFree(c, used)
+			ilog("info", "free numbers for [%d%d]: %v\n", i, j, free)
 			if len(free) == 0 {
-				if t >
 				t++
-				ilog("info", "0 free numbers for [%d%d], re-start\n", i, j)
-				return fillBox(b, c, t)
+				ilog("info", "re-start\n")
+				ilog("info", "seq: %v, try #%d", seq, t)
+				// TODO:
+				// return b.fillBox(c, t, seq)
 			}
-			
+
+			if t > len(free)-1 && i == c.row && j == c.col {
+				ilog("info", "no more tries for [%d%d]\n", i, j)
+				b.setValue(i, j, free[0])
+				seq = append(seq, free[0])
+				// t = 2
+				break col
+			}
+
 			var trynew int
-			if t > 0 && i == c.row && j == c.col {
-				if t > len(free) -1 {
-					ilog("info", "no more tries for [%d%d]\n", i, j)
-					break out
-				}
-				// try different start
-				trynew = free[t]
-			} else {
-				trynew = free[0]
+			if t > 0 {
+				trynew = t
 			}
-			b[i][j].Number = trynew
-			ilog("info", "put %d in [%d%d] %#v\n", trynew, i, j, free)
+			if t > len(free)-1 {
+				trynew = len(free) - 1
+			}
+
+			b.setValue(i, j, free[trynew])
+			seq = append(seq, free[trynew])
 		}
 	}
 
-	// re-generate first three diagonal boxes
-	if b[c.row][c.col].Number == 0 {
-		ilog("info", "re-generating first three diagonal boxes\n")
-		b = gen3boxes()
-		t = 0
-		return fillBox(b, c, t)
-	}
-
-	return b
+	ilog("info", "seq: %v, try #%d", seq, t)
+	return
 }
 
-// add a number as a used (not available)
-// this needed because a used number for a cell
-// should not appear more than once
-func addAsUsed(used []int, n int) []int {
-	if len(used) == 0 {
-		// ilog("debug", "adding %d\n", n)
-		return append(used, n)
-	}
-
-	for i := 0; i < len(used); i++ {
-		// ilog("debug", "checking %d with %d: ", n, used[i])
-		if used[i] == n {
-			// ilog("debug", "skipping %d\n", n)
-			return used
+// add number in a list, no duplicates
+func addOnce(listn []int, n int) []int {
+	for i := 0; i < len(listn); i++ {
+		if listn[i] == n {
+			return listn
 		}
 	}
-	used = append(used, n)
-	// ilog("debug", "adding %d, used: %#+v\n", n, used)
-	return used
+
+	return append(listn, n)
 }
 
 // find used numbers (not available) for a cell
-func findUsed(board [9][9]Cell, cell Cell) []int {
+func (b *Board) findUsed(c Cell) []int {
 	var used []int
-	if board[cell.row][cell.col].Number > 0 {
-		ilog("info", "cell [%d%d] not empty", cell.row, cell.col)
+	if b[c.row][c.col].Number > 0 {
+		// ilog("info", "c [%d%d] not empty", c.row, c.col)
 		return used
 	}
-	if cell.row > 9 || cell.row < 0 {
-		ilog("error", "not a valid cell: [%d%d]", cell.row, cell.col)
+	if c.row > 9 || c.row < 0 {
+		ilog("error", "not a valid c: [%d%d]", c.row, c.col)
 		return used
 	}
-	if cell.col > 9 || cell.col < 0 {
-		ilog("error", "not a valid cell: [%d%d]", cell.row, cell.col)
+	if c.col > 9 || c.col < 0 {
+		ilog("error", "not a valid c: [%d%d]", c.row, c.col)
 		return used
 	}
 
 	// check row first
 	for i := 0; i < 9; i++ {
-		if board[cell.row][i].Number > 0 {
-			used = addAsUsed(used, board[cell.row][i].Number)
+		if b[c.row][i].Number > 0 {
+			used = addOnce(used, b[c.row][i].Number)
 		}
 	}
 
 	// check column
 	for i := 0; i < 9; i++ {
-		if board[i][cell.col].Number > 0 {
-			used = addAsUsed(used, board[i][cell.col].Number)
+		if b[i][c.col].Number > 0 {
+			used = addOnce(used, b[i][c.col].Number)
 		}
 	}
 
 	// finally check box
-	brow, bcol := box(cell.row, cell.col)
+	brow, bcol := box(c.row, c.col)
 	for i := brow; i < brow+3; i++ {
 		for j := bcol; j < bcol+3; j++ {
-			if board[i][j].Number > 0 {
-				used = addAsUsed(used, board[i][j].Number)
+			if b[i][j].Number > 0 {
+				used = addOnce(used, b[i][j].Number)
 			}
 		}
 	}
@@ -243,7 +280,7 @@ func findUsed(board [9][9]Cell, cell Cell) []int {
 }
 
 // find free (available) numbers for a cell
-func findFree(board [9][9]Cell, cell Cell, used []int) []int {
+func (b *Board) findFree(c Cell, used []int) []int {
 	var free []int
 
 	for i := 1; i < 10; i++ {
@@ -264,42 +301,74 @@ func findFree(board [9][9]Cell, cell Cell, used []int) []int {
 	return free
 }
 
-// load puzzle from file
-func load(f string) ([9][9]Cell, error) {
-	var board [9][9]Cell
-
-	j, err := ioutil.ReadFile(f)
-	if err != nil {
-		return board, err
+// check row for a number
+func (b *Board) checkRow(num int, row int) interface{} {
+	for col := 0; col < 9; col++ {
+		if b[row][col].Number == num {
+			return fmt.Sprintf("number %d found in cell [%d%d]", num, row, col)
+		}
 	}
-
-	err = json.Unmarshal(j, &board)
-	if err != nil {
-		return board, err
-	}
-
-	return board, nil
+	return nil
 }
 
-// save puzzle(i.e the board) state
-func save(board [9][9]Cell) error {
-	clearCells(board)
-
-	j, err := json.MarshalIndent(&board, "", "\t")
-	if err != nil {
-		return err
+// check column for a number
+func (b *Board) checkCol(n int, col int) interface{} {
+	for row := 0; row < 9; row++ {
+		if b[row][col].Number == n {
+			return fmt.Sprintf("number %d found in cell [%d%d]", n, row, col)
+		}
 	}
-
-	return ioutil.WriteFile(stateFile, j, 0600)
+	return nil
 }
 
-// shuffle a slice of ints
-func shuffle(ints []int) []int {
-	rand.Seed(time.Now().UnixNano())
-	rand.Shuffle(len(ints), func(i, j int) {
-		ints[i], ints[j] = ints[j], ints[i]
-	})
-	return ints
+// box returns the 3x3 range (box) that a cell belongs in
+// i.e the upper left cell's row and column
+func box(row, col int) (int, int) {
+	crd3 := row / 3
+	ccd3 := col / 3
+
+	srow := crd3 * 3
+	scol := ccd3 * 3
+
+	return srow, scol
+}
+
+// check box for a number
+func (b *Board) checkBox(num int, row int, col int) interface{} {
+	srow, scol := box(row, col)
+	for row := srow; row < srow+3; row++ {
+		for col := scol; col < scol+3; col++ {
+			if b[row][col].Number == num {
+				return fmt.Sprintf("number %d found in cell [%d%d]", num, row, col)
+			}
+		}
+	}
+	return nil
+}
+
+// check number on a cell
+func(b *Board) checkNum(n int, r int, c int) interface{} {
+	if found := b.checkRow(n, r); found != nil {
+		return found
+	}
+	if found := b.checkCol(n, c); found != nil {
+		return found
+	}
+	if found := b.checkBox(n, r, c); found != nil {
+		return found
+	}
+
+	return nil
+}
+
+// add mark number for a cell
+func (b *Board) addMark(row, col, n int) {
+	for i := 0; i < len(b[row][col].marks); i++ {
+		if b[row][col].marks[i] == n {
+			return
+		}
+	}
+	b[row][col].marks = addOnce(b[row][col].marks, n)
 }
 
 // Content prints a cell's number depending on the cell's state
@@ -328,61 +397,119 @@ func (c Cell) Content() string {
 	if c.blink {
 		color = cBlink
 	}
+	if c.selected {
+		color = cBgBlue
+	}
 
 	return "\033[0;" + color + number + "\033[0m"
 }
 
+// select a row
+func (b *Board) selectRow(row int) {
+	for i := 0; i < 9; i++ {
+		b[row][i].selected = true
+	}
+}
+
+// select a column
+func (b *Board) selectColumn(column int) {
+	for i := 0; i < 9; i++ {
+		b[i][column].selected = true
+	}
+}
+
+// select a 3x3 box
+func (b *Board) selectBox(row int, col int) {
+	brow, bcol := box(row, col)
+	for i := brow; i < brow+3; i++ {
+		for j := bcol; j < bcol+3; j++ {
+			b[i][j].selected = true
+		}
+	}
+}
+
+// select row, columns and 3x3 box given a cell
+func (b *Board) selectCells(row int, col int) {
+	b.selectRow(row)
+	b.selectColumn(col)
+	b.selectBox(row, col)
+}
+
+// func printCell(c Cell) {
+// 	ilog("debug", "printing cell: %#v\n", c)
+
+// 	switch c.row % 3 {
+// 	case 0:
+// 		if c.col%3 == 0 {
+// 			fmt.Printf("\033[0;%s\u250F\u2501\u2501\u2501\033[0m", c.color)
+// 			fmt.Printf("\033[0;%s\u2503 %d \033[0m", c.color, c.Number)
+// 		}
+// 		if c.col%3 == 1 || c.col%3 == 2 {
+// 			fmt.Printf("\033[0;%s\u252F\u2501\u2501\u2501\033[0m", c.color)
+// 			fmt.Printf("\033[0;%s\u2502 %d \033[0m", c.color, c.Number)
+// 		}
+// 	case 1:
+// 		if c.col%3 == 0 {
+// 			fmt.Printf("\033[0;%s\u2520\u2500\u2500\u2500\033[0m", c.color)
+// 			fmt.Printf("\033[0;%s\u2503 %d \033[0m", c.color, c.Number)
+// 		}
+// 		if c.col%3 == 1 || c.col%3 == 2 {
+// 			fmt.Printf("\033[0;%s\u253C\u2501\u2501\u2501\033[0m", c.color)
+// 			fmt.Printf("\033[0;%s\u2502 %d \033[0m", c.color, c.Number)
+// 		}
+// 	case 2:
+// 		if c.col%3 == 0 {
+// 			fmt.Printf("\033[0;%s\u2520\u2500\u2500\u2500\033[0m", c.color)
+// 			fmt.Printf("\033[0;%s\u2503 %d \033[0m", c.color, c.Number)
+// 		}
+// 		if c.col%3 == 1 || c.col%3 == 2 {
+// 			fmt.Printf("\033[0;%s\u253C\u2501\u2501\u2501\033[0m", c.color)
+// 			fmt.Printf("\033[0;%s\u2502 %d \033[0m", c.color, c.Number)
+// 		}
+// 	}
+// }
+
 // prints the board with the cells contents if num not zero
-func print(b [9][9]Cell) {
+func (b *Board) print() {
 	fmt.Printf("\n\n")
 	// START first row of boxes
-	fmt.Printf("   \033[0;2m" + "  0   1   2   3   4   5   6   7   8\n" + "\033[0m")
-	// upper border
-	fmt.Printf("   \u250F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u2513\n")
+	fmt.Printf("\t  \033[0;2m" + "  0   1   2   3   4   5   6   7   8\n" + "\033[0m")
+	fmt.Printf("\t  \u250F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u252F\u2501\u2501\u2501\u2513\n")
 	// first row of numbers
-	printRow(0, b)
-	// first middle row
-	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
+	b.printRow(0)
+	fmt.Printf("\t  \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// second row of numbers
-	printRow(1, b)
-	// second middle row
-	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
+	b.printRow(1)
+	fmt.Printf("\t  \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// third row of numbers
-	printRow(2, b)
-	// lower border
-	fmt.Printf("   \u2523\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u252B\n")
+	b.printRow(2)
+	fmt.Printf("\t  \u2523\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u252B\n")
 	// END first row of boxes
 
 	// REPEAT
 	// START second row of boxes (no border)
 	// first row of numbers
-	printRow(3, b)
-	// first middle row
-	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
+	b.printRow(3)
+	fmt.Printf("\t  \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// second row of numbers
-	printRow(4, b)
-	// second middle row
-	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
+	b.printRow(4)
+	fmt.Printf("\t  \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// third row of numbers
-	printRow(5, b)
-	// lower border
-	fmt.Printf("   \u2523\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u252B\n")
+	b.printRow(5)
+	fmt.Printf("\t  \u2523\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u254B\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u253F\u2501\u2501\u2501\u252B\n")
 	// END second row of boxes
 	// REPEAT
 	// START third row of boxes (no border)
 
 	// first row of numbers
-	printRow(6, b)
-	// first middle row
-	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
+	b.printRow(6)
+	fmt.Printf("\t  \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// second row of numbers
-	printRow(7, b)
-	// second middle row
-	fmt.Printf("   \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
+	b.printRow(7)
+	fmt.Printf("\t  \u2520\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2542\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2528\n")
 	// third row of numbers
-	printRow(8, b)
-	// lower border
-	fmt.Printf("   \u2517\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u253B\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u253B\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u251B\n")
+	b.printRow(8)
+	fmt.Printf("\t  \u2517\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u253B\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u253B\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u2537\u2501\u2501\u2501\u251B\n")
 	// END third row of boxes
 
 	fmt.Printf("\n\n")
@@ -391,28 +518,33 @@ func print(b [9][9]Cell) {
 // print each row between cell borders separately
 // so the cell's numbers are printed (with color)
 // replace 2502 with 250A or 2506 for vertical lines
-func printRow(row int, board [9][9]Cell) {
+func (b *Board) printRow(row int) {
 	// print row number row in gray color
-	fmt.Printf(" \033[0;2m%d\033[0m", row)
+	fmt.Printf("\t\033[0;2m%d\033[0m ", row)
 
 	// this one line printed; broken into three for better readability
-	fmt.Printf(" \u2503 %s \u2502 %s \u2502 %s \u2503", board[row][0].Content(), board[row][1].Content(), board[row][2].Content())
-	fmt.Printf(" %s \u2502 %s \u2502 %s \u2503", board[row][3].Content(), board[row][4].Content(), board[row][5].Content())
-	fmt.Printf(" %s \u2502 %s \u2502 %s \u2503\n", board[row][6].Content(), board[row][7].Content(), board[row][8].Content())
+	fmt.Printf("\u2503 %s \u2502 %s \u2502 %s \u2503", b[row][0].Content(), b[row][1].Content(), b[row][2].Content())
+	fmt.Printf(" %s \u2502 %s \u2502 %s \u2503", b[row][3].Content(), b[row][4].Content(), b[row][5].Content())
+	fmt.Printf(" %s \u2502 %s \u2502 %s \u2503\n", b[row][6].Content(), b[row][7].Content(), b[row][8].Content())
 }
 
 // mapValues makes a map of numbers in cells
-func mapValues(board [9][9]Cell) map[int][]Cell {
+func (b *Board) mapValues() map[int][]Cell {
 	m := make(map[int][]Cell)
 
 	// iterate over all cells
 	for row := 0; row < 9; row++ {
 		for col := 0; col < 9; col++ {
 			// current cell
-			c := board[row][col]
+			c := b[row][col]
 
 			// initial number in this cell
 			number := c.Number
+
+			// ignore 0s
+			if number == 0 {
+				continue
+			}
 
 			// row and col fields set here;
 			// initial puzzle.json file has only numbers set for each cell
@@ -425,6 +557,17 @@ func mapValues(board [9][9]Cell) map[int][]Cell {
 	}
 
 	return m
+}
+
+// print mapped values
+func printMaps(vmap map[int][]Cell) {
+	for i := 1; i < 10; i++ {
+		fmt.Printf("\tnumber %d found in:", i)
+		for _, v := range vmap[i] {
+			fmt.Printf(" [%d%d]", v.row, v.col)
+		}
+		fmt.Print("\n")
+	}
 }
 
 // difficulty measured by the count of 0's;
@@ -446,15 +589,15 @@ func clearConsole() {
 
 // clear state from all cells;
 // Number, row, col and marks remain
-func clearCells(board [9][9]Cell) {
+func (b *Board) clear() {
 	for row := 0; row < 9; row++ {
 		for col := 0; col < 9; col++ {
-			board[row][col].invalid = false
-			board[row][col].active = false
-			board[row][col].selected = false
-			board[row][col].candid = false
-			board[row][col].solved = false
-			board[row][col].blink = false
+			b[row][col].invalid = false
+			b[row][col].active = false
+			b[row][col].selected = false
+			b[row][col].candid = false
+			b[row][col].solved = false
+			b[row][col].blink = false
 		}
 	}
 }
@@ -492,70 +635,30 @@ func getNumber() int {
 	return num
 }
 
-func checkRow(board [9][9]Cell, num int, row int) interface{} {
-	for col := 0; col < 9; col++ {
-		if board[row][col].Number == num {
-			return fmt.Sprintf("number %d found in cell [%d%d]", num, row, col)
-		}
-	}
-	return nil
-}
-
-func checkCol(board [9][9]Cell, num int, col int) interface{} {
-	for row := 0; row < 9; row++ {
-		if board[row][col].Number == num {
-			return fmt.Sprintf("number %d found in cell [%d%d]", num, row, col)
-		}
-	}
-	return nil
-}
-
-// box returns the 9-cell range (box) that a cell belongs in
-// i.e the upper left cell's row and column
-func box(row, col int) (int, int) {
-	crd3 := row / 3
-	ccd3 := col / 3
-
-	srow := crd3 * 3
-	scol := ccd3 * 3
-
-	return srow, scol
-}
-
-func checkBox(board [9][9]Cell, num int, row int, col int) interface{} {
-	srow, scol := box(row, col)
-	for row := srow; row < srow+3; row++ {
-		for col := scol; col < scol+3; col++ {
-			if board[row][col].Number == num {
-				return fmt.Sprintf("number %d found in cell [%d%d]", num, row, col)
-			}
-		}
-	}
-	return nil
-}
-
-func play(board [9][9]Cell) {
-	print(board)
+func (b *Board) play() {
+	b.print()
 	for {
 		num := getNumber()
 		ilog("debug", "got %d", num)
-		err := save(board)
+		err := b.save()
 		if err != nil {
 			ilog("error", "error saving: %s", err)
 		}
 
+		// TODO
 		// check number
 		// check in row
 		// check in column
 		// check in 9-cell box
 		// cross hatch
 		// set board's state
-		print(board)
+		b.print()
 	}
 }
 
 func main() {
 	debug = true
+	b := Board{}
 
 	// main loop
 	fmt.Printf("\tOptions: (n)ew, (r)esume, e(x)it\n")
@@ -564,24 +667,24 @@ func main() {
 		switch input {
 		case "n":
 			// load puzzle from puzzle.json file
-			board, err := load(puzzleFile)
+			err := b.load(puzzleFile)
 			if err != nil {
 				panic(err)
 			}
-			play(board)
+			b.play()
 			// // make a map of existing numbers in cells
-			// mapv := mapValues(board)
+			// mapv := b.mapValues()
 			// ilog("info", "\tNew puzzle, difficulty: %s\n", difficulty(mapv))
-			// print(board)
+			// b.print()
 			// input = getInput()
 
 		case "r":
 			// load previously saved puzzle in state.json
-			board, err := load(stateFile)
+			err := b.load(stateFile)
 			if err != nil {
 				panic(err)
 			}
-			play(board)
+			b.play()
 
 		case "x":
 			return // exit program

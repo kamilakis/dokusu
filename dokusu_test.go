@@ -5,119 +5,171 @@ import (
 	"testing"
 )
 
+func TestPrintCell(t *testing.T) {
+	debug = false
+	b := Board{}
+	// for i := 0; i < 9; i++ {
+	// 	t.Logf("%d mod 3 equals: %#+v", i, i%3)
+	// }
+	b.gen3boxes()
+	b.selectCells(5, 8)
+	b.print()
+}
+
 func TestRandRow(t *testing.T) {
-	var board [9][9]Cell
+	b := Board{}
 	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
 	// populate a row
 	for col := 0; col < 9; col++ {
-		board[0][col].Number = ints[col]
+		b[0][col].Number = ints[col]
 	}
-	print(board)
+	b.print()
 
 	// check row
 	for col := 0; col < 9; col++ {
-		got := board[0][col].Number
+		got := b[0][col].Number
 		if got > 9 || got < 1 { // this never happens
 			t.Fail()
 			t.Logf("not a valid number: %d", got)
-			board[0][col].invalid = true
+			b[0][col].invalid = true
 		}
 	}
-	print(board)
+	b.print()
 }
 
 func TestRandColumn(t *testing.T) {
-	var board [9][9]Cell
+	b := Board{}
 	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
 	// populate column 5
 	column := 5
 	for row := 0; row < 9; row++ {
-		board[row][column].Number = ints[row]
+		b[row][column].Number = ints[row]
 	}
-	print(board)
+	b.print()
 }
 
 func TestGenBox(t *testing.T) {
-	var board [9][9]Cell
+	b := Board{}
 	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
 	// populate first box
 	cell := Cell{row: 0, col: 0}
-	board = genBox(board, cell)
+	b.genBox(cell)
 	// populate second box
 	cell = Cell{row: 3, col: 3}
-	board = genBox(board, cell)
+	b.genBox(cell)
 	// populate third box
 	cell = Cell{row: 6, col: 6}
-	board = genBox(board, cell)
+	b.genBox(cell)
 
-	print(board)
+	b.print()
+}
+
+func TestFillBox(t *testing.T) {
+	debug = true
+	b := Board{}
+	b.gen3boxes()
+	// b.print()
+
+	// try filling second starting from cell [03]
+	c := Cell{row: 0, col: 3}
+	b.fillBox(c, 0, []int{})
+	b.print()
+
+	if b[c.row+2][c.col+2].Number > 0 {
+		c := Cell{row: 0, col: 6}
+		b.fillBox(c, 0, []int{})
+		b.print()
+	}
+
+	if b[c.row+2][c.col+2].Number > 0 {
+		c := Cell{row: 3, col: 6}
+		b.fillBox(c, 0, []int{})
+		b.print()
+	}
+
+	if b[c.row+2][c.col+2].Number > 0 {
+		c := Cell{row: 3, col: 0}
+		b.fillBox(c, 0, []int{})
+		b.print()
+	}
 }
 
 func TestComplete(t *testing.T) {
-	debug = false
-	board := gen3boxes()
-	print(board)
+	debug = true
+	b := Board{}
+	b.gen3boxes()
 
-	// fourth box starting from [03]
-	// this one cannot be generated randomly
-	c := Cell{row: 0, col: 3}
-	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
-	board = fillBox(board, c, 0)
-	print(board)
+	// try all numbers from 1 to 9
+	// mark cells with possible values
+	for row := 0; row < 9; row++ {
+		for col := 0; col < 9; col++ {
+			for n := 1; n < 10; n++ {
+				if  b.checkNum(n, row, col) == nil {
+					// b[row][col].selected = true
+					b[row][col].marks = addOnce(b[row][col].marks, n)
+				}
+			}
+		}
+	}
 
-	// fifth box starting from [06]
-	// this one cannot be generated randomly
-	c = Cell{row: 0, col: 6}
-	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
-	board = fillBox(board, c, 0)
+	// show marks
+	for row := 0; row < 9; row++ {
+		for col := 0; col < 9; col++ {
+			t.Logf("marks for [%d%d]: %v", row, col, b[row][col].marks)
+		}
+	}
 
-	c = Cell{row: 3, col: 0}
-	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
-	board = fillBox(board, c, 0)
+	// vmap := mapValues(board)
+	// printMaps(vmap)
 
-	c = Cell{row: 3, col: 6}
-	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
-	board = fillBox(board, c, 0)
+	// having mark numbers for all empty cells
+	// try all possible values for any cell, i.e. brute force
+	for row := 0; row < 9; row++ {
+		for col := 0; col < 9; col++ {
+			if len(b[row][col].marks) > 0 {
+				c := b[row][col]
+				t.Logf("marks for [%d%d]: %v", row, col, c.marks)
+				if check := b.checkNum(c.marks[0], row, col); check != nil {
+					t.Logf("cannot set %d for [%d%d]: %v", c.marks[0], row, col, check)
+					b.setValue(row, col, c.marks[1])
+				} else  {
+					b.setValue(row, col, c.marks[0])
+				}
+			}
+		}
+	}
 
-	c = Cell{row: 6, col: 0}
-	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
-	board = fillBox(board, c, 0)
-
-	c = Cell{row: 6, col: 6}
-	t.Logf("++++++++++ filling box from [%d%d]\n", c.row, c.col)
-	board = fillBox(board, c, 0)
-
-
-	print(board)
+	b.print()
 }
 
 func TestGenCell(t *testing.T) {
-	board := gen3boxes()
-	print(board)
+	b := Board{}
+	b.gen3boxes()
+	b.print()
 	// proceed one cell at a time
 	for row := 0; row < 9; row++ {
 		for col := 0; col < 9; col++ {
-			// c := &board[row][col]
-			if board[row][col].Number == 0 {
-				used := findUsed(board, Cell{row:row,col:col})
-				free := findFree(board, Cell{row:row,col:col}, used)
+			c := b[row][col]
+			if b[row][col].Number == 0 {
+				used := b.findUsed(c)
+				free := b.findFree(c, used)
 				t.Logf("free numbers for [%d%d]: %#v", row, col, free)
 				// set cell's number with the first free
-				board[row][col].Number = free[0]
-				print(board)
+				b[row][col].Number = free[0]
+				b.print()
 				t.Logf("set number %d for [%d%d]\n", free[0], row, col)
 				if col == 8 {
 					t.Logf("---------- row %d complete\n", row)
 				}
 				continue
 			}
-			t.Logf("number %d already set in [%d%d]\n", board[row][col].Number, row, col)
+			t.Logf("number %d already set in [%d%d]\n", b[row][col].Number, row, col)
 			if col == 8 {
 				t.Logf("+++ column %d complete\n", col)
 			}
@@ -126,21 +178,23 @@ func TestGenCell(t *testing.T) {
 			t.Logf("---------- row %d complete\n", row)
 		}
 	}
-	print(board)
+	b.print()
 }
 
 func TestFindUsed(t *testing.T) {
-	board := gen3boxes()
+	b := Board{}
+	b.gen3boxes()
 
 	// find used numbers (not available) for this cell
-	c := Cell{row: 5, col: 2}
-	used := findUsed(board, c)
-	print(board)
+	c := b[5][2]
+	used := b.findUsed(c)
+	b.print()
 	t.Logf("used numbers (not available) for [%d%d], %#+v", c.row, c.col, used)
 }
 
 func TestFindFree(t *testing.T) {
-	board := gen3boxes()
+	b := Board{}
+	b.gen3boxes()
 
 	// cells to check for free (available) numbers
 	var tests = []struct {
@@ -171,9 +225,9 @@ func TestFindFree(t *testing.T) {
 
 	for _, test := range tests {
 		t.Logf("testing cell [%d%d]", test.row, test.col)
-		c := Cell{row: test.row, col: test.col}
-		used := findUsed(board, c)
-		free := findFree(board, c, used)
+		c := b[test.row][test.col]
+		used := b.findUsed(c)
+		free := b.findFree(c, used)
 		if len(used)+len(free) != test.want {
 			t.Errorf("used+free equals to %d", len(used)+len(free))
 		}
@@ -188,6 +242,7 @@ func TestFindFree(t *testing.T) {
 }
 
 func TestCheckRow(t *testing.T) {
+	b := Board{}
 	// numbers to check against the current state of the board
 	var tests = []struct {
 		num  int
@@ -202,13 +257,13 @@ func TestCheckRow(t *testing.T) {
 		{5, 6, nil},
 	}
 
-	board, err := load(puzzleFile)
+	err := b.load(puzzleFile)
 	if err != nil {
 		t.Errorf("error loading puzzle file: %s", err)
 	}
 
 	for _, test := range tests {
-		got := checkRow(board, test.num, test.row)
+		got := b.checkRow(test.num, test.row)
 		if got != test.want {
 			t.Errorf("CheckRow(%d, %d) = %#+v; want %#+v", test.num, test.row, got, test.want)
 		}
@@ -216,6 +271,7 @@ func TestCheckRow(t *testing.T) {
 }
 
 func TestCheckCol(t *testing.T) {
+	b := Board{}
 	// numbers to check against the current state of the board
 	var tests = []struct {
 		num  int
@@ -230,13 +286,13 @@ func TestCheckCol(t *testing.T) {
 		{5, 6, nil},
 	}
 
-	board, err := load(puzzleFile)
+	err := b.load(puzzleFile)
 	if err != nil {
 		t.Errorf("error loading puzzle file: %s", err)
 	}
 
 	for _, test := range tests {
-		got := checkCol(board, test.num, test.col)
+		got := b.checkCol(test.num, test.col)
 		if got != test.want {
 			t.Errorf("checkCol(%d, %d) = %v; want %v", test.num, test.col, got, test.want)
 		}
@@ -244,6 +300,7 @@ func TestCheckCol(t *testing.T) {
 }
 
 func TestCheckBox(t *testing.T) {
+	b := Board{}
 	// numbers to check against the current state of the board
 	var tests = []struct {
 		num  int
@@ -259,13 +316,13 @@ func TestCheckBox(t *testing.T) {
 		{5, 3, 6, nil},
 	}
 
-	board, err := load(puzzleFile)
+	err := b.load(puzzleFile)
 	if err != nil {
 		t.Errorf("error loading puzzle file: %s", err)
 	}
 
 	for _, test := range tests {
-		got := checkBox(board, test.num, test.row, test.col)
+		got := b.checkBox(test.num, test.row, test.col)
 		if got != test.want {
 			t.Errorf("checkBox(%d, %d, %d) = %v; want %v", test.num, test.row, test.col, got, test.want)
 		}
@@ -273,7 +330,7 @@ func TestCheckBox(t *testing.T) {
 }
 
 func TestMapValues(t *testing.T) {
-	var board [9][9]Cell
+	b := Board{}
 	var tests = []struct {
 		row int
 		col int
@@ -292,13 +349,13 @@ func TestMapValues(t *testing.T) {
 	for _, test := range tests {
 		t.Logf("=== start test %#v", test)
 		// set cell's number
-		board[test.row][test.col].Number = test.set
+		b[test.row][test.col].Number = test.set
 		// make new values map of board
-		vmap := mapValues(board)
+		vmap := b.mapValues()
 		t.Logf("values map for %d: %#+v\n", test.set, vmap[test.set])
 		// expect to find the cell set on the vmap
 		for i := 0; i < len(vmap[test.set]); i++ {
-			if vmap[test.set][i].Number == test.set && 
+			if vmap[test.set][i].Number == test.set &&
 				vmap[test.set][i].row == test.row &&
 				vmap[test.set][i].col == test.col {
 				t.Logf("number %d for [%d%d] found in %#v\n", test.set, test.row, test.col, vmap[test.set][i])
@@ -314,24 +371,25 @@ func TestMapValues(t *testing.T) {
 }
 
 func TestSaveState(t *testing.T) {
-	board, err := load(puzzleFile)
+	b := Board{}
+	err := b.load(puzzleFile)
 	if err != nil {
 		t.Errorf("error loading state file: %s", err)
 	}
 
-	board[0][0].Number = 15
+	b[0][0].Number = 15
 
 	// save puzzle state
-	if err := save(board); err != nil {
+	if err := b.save(); err != nil {
 		t.Logf("error saving puzzle: %s", err)
 	}
 
-	board, err = load(stateFile)
+	err = b.load(stateFile)
 	if err != nil {
 		t.Errorf("error loading state file: %s", err)
 	}
 
-	if board[0][0].Number != 15 {
+	if b[0][0].Number != 15 {
 		t.Error("the number was not saved")
 	}
 }
