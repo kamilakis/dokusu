@@ -70,6 +70,11 @@ var debug bool
 // user input
 var scanner *bufio.Scanner
 
+// print cell in [rowcol] format, e.g. [04]
+func (c Cell) String() string {
+	return fmt.Sprintf("[%d%d]", c.row, c.col)
+}
+
 func ilog(cat string, msg string, o ...interface{}) {
 	switch cat {
 
@@ -85,9 +90,21 @@ func ilog(cat string, msg string, o ...interface{}) {
 		return
 
 	default:
-		log.Printf(msg, o...)
+		fmt.Printf(msg, o...)
 		return
 	}
+}
+
+// create a new empty board
+func board() Board {
+	b := Board{}
+	for row := 0; row < 9; row++ {
+		for col := 0; col < 9; col++ {
+			b[row][col].row = row
+			b[row][col].col = col
+		}
+	}
+	return b
 }
 
 // load puzzle from file
@@ -159,6 +176,86 @@ func (b *Board) setValue(r int, c int, v int) {
 	ilog("info", " [%d%d] set to %d\n", r, c, v)
 }
 
+// check marks for a cell
+func (b *Board) checkMarks(c Cell) int {
+	ilog("info", "check marks for %s%v:\n", c, c.marks)
+	if len(c.marks) == 0 {
+		ilog("info", "no marks available for %s\n", c)
+		return 0 // returning 0 actually means a failed check
+	}
+	if len(c.marks) == 1 {
+		ilog("info", "only one available mark for %s\n", c)
+		return c.marks[0] // returning the one and only available mark
+	}
+	for _, mark := range c.marks {
+		check := b.checkNum(mark, c.row, c.col)
+		if check != nil {
+			ilog("info", "mark %d not fit for %s: %v\n", mark, c, check)
+		} else {
+			return mark
+		}
+	}
+
+	ilog("info", "marks exchausted for %s\n", c)
+	return 0
+}
+
+// swap values of two cells; an attempt to different solutions
+// TODO: exclude completed boxes?
+func (b *Board) swap(c1 Cell, c2 Cell) {
+	ilog("info", "swap %s with %s\n", c1, c2)
+	b.setValue(c1.row, c1.col, c2.Number)
+	b.setValue(c2.row, c2.col, c1.Number)
+}
+
+// find conflicting number in this cell
+// check only row and column, cannot swap a box
+func (b *Board) findConflict(c Cell) Cell {
+	for col := 0; col < 9; col++ {
+		if b[c.row][col].col == col {
+			continue
+		}
+		if b[c.row][col].Number == c.Number {
+			return Cell{row:c.row, col:col}
+		}
+	}
+	for row := 0; row < 9; row++ {
+		if b[row][c.col].row == row {
+			continue
+		}
+		if b[row][c.col].Number == c.Number {
+			return Cell{row:row, col:c.col}
+		}
+	}
+
+	// TODO: change function return value
+	return Cell{row:0, col:0}
+}
+
+// try setting all cells one by one
+func (b *Board) setAll(retry int) bool {
+	// out:
+	for row := 0; row < 9; row++ {
+		col:
+		for col := 0; col < 9; col++ {
+			c := b[row][col]
+			if c.Number > 0 {
+				ilog("info", "cell %s already set with %d\n", c, c.Number)
+				continue col
+			}
+			mark := b.checkMarks(c)
+			if mark == 0 { // marks exchausted or not available for this cell
+				b.swap(c, b.findConflict(c))
+				return false // no marks available for cell
+
+			}
+			b.setValue(row, col, mark)
+			continue col
+		}
+	}
+
+	return true
+}
 // recursively fill a 3x3 box
 // find free numbers available for each cell
 // if none found start again with next free number
@@ -658,7 +755,7 @@ func (b *Board) play() {
 
 func main() {
 	debug = true
-	b := Board{}
+	b := board()
 
 	// main loop
 	fmt.Printf("\tOptions: (n)ew, (r)esume, e(x)it\n")

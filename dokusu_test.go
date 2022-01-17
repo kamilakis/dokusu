@@ -7,7 +7,7 @@ import (
 
 func TestPrintCell(t *testing.T) {
 	debug = false
-	b := Board{}
+	b := board()
 	// for i := 0; i < 9; i++ {
 	// 	t.Logf("%d mod 3 equals: %#+v", i, i%3)
 	// }
@@ -17,7 +17,7 @@ func TestPrintCell(t *testing.T) {
 }
 
 func TestRandRow(t *testing.T) {
-	b := Board{}
+	b := board()
 	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
@@ -40,7 +40,7 @@ func TestRandRow(t *testing.T) {
 }
 
 func TestRandColumn(t *testing.T) {
-	b := Board{}
+	b := board()
 	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
@@ -53,7 +53,7 @@ func TestRandColumn(t *testing.T) {
 }
 
 func TestGenBox(t *testing.T) {
-	b := Board{}
+	b := board()
 	ints := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	ints = shuffle(ints)
 
@@ -72,7 +72,7 @@ func TestGenBox(t *testing.T) {
 
 func TestFillBox(t *testing.T) {
 	debug = true
-	b := Board{}
+	b := board()
 	b.gen3boxes()
 	// b.print()
 
@@ -101,8 +101,8 @@ func TestFillBox(t *testing.T) {
 }
 
 func TestComplete(t *testing.T) {
-	debug = true
-	b := Board{}
+	debug = false
+	b := board()
 	b.gen3boxes()
 
 	// try all numbers from 1 to 9
@@ -119,37 +119,30 @@ func TestComplete(t *testing.T) {
 	}
 
 	// show marks
-	for row := 0; row < 9; row++ {
-		for col := 0; col < 9; col++ {
-			t.Logf("marks for [%d%d]: %v", row, col, b[row][col].marks)
-		}
-	}
+	// for row := 0; row < 9; row++ {
+	// 	for col := 0; col < 9; col++ {
+	// 		t.Logf("marks for [%d%d]: %v", row, col, b[row][col].marks)
+	// 	}
+	// }
 
 	// vmap := mapValues(board)
 	// printMaps(vmap)
 
 	// having mark numbers for all empty cells
 	// try all possible values for any cell, i.e. brute force
-	for row := 0; row < 9; row++ {
-		for col := 0; col < 9; col++ {
-			if len(b[row][col].marks) > 0 {
-				c := b[row][col]
-				t.Logf("marks for [%d%d]: %v", row, col, c.marks)
-				if check := b.checkNum(c.marks[0], row, col); check != nil {
-					t.Logf("cannot set %d for [%d%d]: %v", c.marks[0], row, col, check)
-					b.setValue(row, col, c.marks[1])
-				} else  {
-					b.setValue(row, col, c.marks[0])
-				}
-			}
+	for i := 0; i < 1; i++ {
+		t.Logf("------------- START ATTEMPT #%d ----------------", i)
+		if b.setAll(i) {
+			t.Logf("finished at retry #%d", i)
+			break
 		}
 	}
-
 	b.print()
+
 }
 
 func TestGenCell(t *testing.T) {
-	b := Board{}
+	b := board()
 	b.gen3boxes()
 	b.print()
 	// proceed one cell at a time
@@ -182,7 +175,7 @@ func TestGenCell(t *testing.T) {
 }
 
 func TestFindUsed(t *testing.T) {
-	b := Board{}
+	b := board()
 	b.gen3boxes()
 
 	// find used numbers (not available) for this cell
@@ -193,7 +186,7 @@ func TestFindUsed(t *testing.T) {
 }
 
 func TestFindFree(t *testing.T) {
-	b := Board{}
+	b := board()
 	b.gen3boxes()
 
 	// cells to check for free (available) numbers
@@ -242,7 +235,7 @@ func TestFindFree(t *testing.T) {
 }
 
 func TestCheckRow(t *testing.T) {
-	b := Board{}
+	b := board()
 	// numbers to check against the current state of the board
 	var tests = []struct {
 		num  int
@@ -271,7 +264,7 @@ func TestCheckRow(t *testing.T) {
 }
 
 func TestCheckCol(t *testing.T) {
-	b := Board{}
+	b := board()
 	// numbers to check against the current state of the board
 	var tests = []struct {
 		num  int
@@ -300,7 +293,7 @@ func TestCheckCol(t *testing.T) {
 }
 
 func TestCheckBox(t *testing.T) {
-	b := Board{}
+	b := board()
 	// numbers to check against the current state of the board
 	var tests = []struct {
 		num  int
@@ -330,7 +323,7 @@ func TestCheckBox(t *testing.T) {
 }
 
 func TestMapValues(t *testing.T) {
-	b := Board{}
+	b := board()
 	var tests = []struct {
 		row int
 		col int
@@ -371,7 +364,7 @@ func TestMapValues(t *testing.T) {
 }
 
 func TestSaveState(t *testing.T) {
-	b := Board{}
+	b := board()
 	err := b.load(puzzleFile)
 	if err != nil {
 		t.Errorf("error loading state file: %s", err)
