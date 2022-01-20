@@ -27,7 +27,7 @@ type Cell struct {
 	blink    bool
 }
 
-// Board 
+// Board ...
 type Board [9][9]Cell
 
 const (
@@ -176,6 +176,20 @@ func (b *Board) setValue(r int, c int, v int) {
 	ilog("info", " [%d%d] set to %d\n", r, c, v)
 }
 
+// mark cells with possible values
+func (b *Board) markCells() {
+	for row := 0; row < 9; row++ {
+		for col := 0; col < 9; col++ {
+			for n := 1; n < 10; n++ {
+				if b.checkNum(n, row, col) == nil {
+					// b[row][col].selected = true
+					b[row][col].marks = addOnce(b[row][col].marks, n)
+				}
+			}
+		}
+	}
+}
+
 // check marks for a cell
 func (b *Board) checkMarks(c Cell) int {
 	ilog("info", "check marks for %s%v:\n", c, c.marks)
@@ -211,32 +225,37 @@ func (b *Board) swap(c1 Cell, c2 Cell) {
 // find conflicting number in this cell
 // check only row and column, cannot swap a box
 func (b *Board) findConflict(c Cell) Cell {
-	for col := 0; col < 9; col++ {
-		if b[c.row][col].col == col {
+	for col := 0; col < 9; col++ { // check row first
+		ilog("info", "check for conflicting %d in %#v\n", c.marks[len(c.marks)-1], b[c.row][col])
+		if b[c.row][col].col == col { // skip self
 			continue
 		}
-		if b[c.row][col].Number == c.Number {
-			return Cell{row:c.row, col:col}
+		if b[c.row][col].Number == c.marks[len(c.marks)-1] {
+			ilog("info", " found in %s\n", b[c.row][col])
+			return Cell{row: c.row, col: col}
 		}
 	}
-	for row := 0; row < 9; row++ {
-		if b[row][c.col].row == row {
+	for row := 0; row < 9; row++ { // check column
+		ilog("info", "check for conflicting %d in %#v\n", c.marks[len(c.marks)-1], b[row][c.col])
+		if b[row][c.col].row == row { // skip self
 			continue
 		}
-		if b[row][c.col].Number == c.Number {
-			return Cell{row:row, col:c.col}
+		if b[row][c.col].Number == c.marks[len(c.marks)-1] {
+			ilog("info", " found in %s\n", b[row][c.col])
+			return Cell{row: row, col: c.col}
 		}
 	}
 
 	// TODO: change function return value
-	return Cell{row:0, col:0}
+	ilog("info", "no conflicts found for %s\n", c)
+	return Cell{row: 0, col: 0}
 }
 
 // try setting all cells one by one
 func (b *Board) setAll(retry int) bool {
 	// out:
 	for row := 0; row < 9; row++ {
-		col:
+	col:
 		for col := 0; col < 9; col++ {
 			c := b[row][col]
 			if c.Number > 0 {
@@ -246,6 +265,7 @@ func (b *Board) setAll(retry int) bool {
 			mark := b.checkMarks(c)
 			if mark == 0 { // marks exchausted or not available for this cell
 				b.swap(c, b.findConflict(c))
+				b.markCells()
 				return false // no marks available for cell
 
 			}
@@ -256,6 +276,54 @@ func (b *Board) setAll(retry int) bool {
 
 	return true
 }
+
+// clear box's values - set .Number to 0
+func (b *Board) clearBox(c Cell) {
+	for i := 0; i < 3; i++ {
+		for j := 0; j < 3; j++ {
+			b.setValue(c.row+i, c.col+j, 0)
+		}
+	}
+}
+
+// set a 3x3 box's values based on marks available
+func (b *Board) setBox(c Cell, retry int) bool {
+	if retry == 0 && c.Number > 0 {
+		ilog("error", "cell %s already set with %d\n", c, c.Number)
+		return false
+	}
+
+	for i := 0; i < 3; i++ {
+	col:
+		for j := 0; j < 3; j++ {
+			currentCell := b[c.row+i][c.col+j]
+			ilog("info", "checking cell %s .. ", currentCell)
+			mark := b.checkMarks(currentCell)
+
+			// check if this a retry starting from the first cell
+			if retry > 0 && i == 0 && j == 0 {
+				if len(currentCell.marks) > retry {
+					ilog("info", "trying mark #%d for cell %s", retry, currentCell)
+					b.setValue(currentCell.row, currentCell.col, currentCell.marks[retry])
+					b.markCells()
+					continue col
+				} else {
+					ilog("info", "marks exchausted for cell %s\n", c)
+					return false
+				}
+			}
+			if mark == 0 {
+				ilog("info", "no marks available for cell %s\n", currentCell)
+				return false
+			}
+			b.setValue(currentCell.row, currentCell.col, mark)
+			continue col
+		}
+	}
+
+	return true
+}
+
 // recursively fill a 3x3 box
 // find free numbers available for each cell
 // if none found start again with next free number
@@ -283,7 +351,7 @@ func (b *Board) fillBox(c Cell, t int, seq []int) {
 
 	// out:
 	for i := c.row; i < c.row+3; i++ {
-		col:
+	col:
 		for j := c.col; j < c.col+3; j++ {
 			c := b[i][j]
 			used := b.findUsed(c)
@@ -444,7 +512,7 @@ func (b *Board) checkBox(num int, row int, col int) interface{} {
 }
 
 // check number on a cell
-func(b *Board) checkNum(n int, r int, c int) interface{} {
+func (b *Board) checkNum(n int, r int, c int) interface{} {
 	if found := b.checkRow(n, r); found != nil {
 		return found
 	}

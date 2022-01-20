@@ -104,41 +104,21 @@ func TestComplete(t *testing.T) {
 	debug = false
 	b := board()
 	b.gen3boxes()
+	b.markCells()
 
-	// try all numbers from 1 to 9
-	// mark cells with possible values
-	for row := 0; row < 9; row++ {
-		for col := 0; col < 9; col++ {
-			for n := 1; n < 10; n++ {
-				if  b.checkNum(n, row, col) == nil {
-					// b[row][col].selected = true
-					b[row][col].marks = addOnce(b[row][col].marks, n)
-				}
-			}
-		}
-	}
-
-	// show marks
-	// for row := 0; row < 9; row++ {
-	// 	for col := 0; col < 9; col++ {
-	// 		t.Logf("marks for [%d%d]: %v", row, col, b[row][col].marks)
-	// 	}
-	// }
-
-	// vmap := mapValues(board)
-	// printMaps(vmap)
-
-	// having mark numbers for all empty cells
-	// try all possible values for any cell, i.e. brute force
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 10; i++ {
 		t.Logf("------------- START ATTEMPT #%d ----------------", i)
-		if b.setAll(i) {
+		if b.setBox(b[0][3], i) {
 			t.Logf("finished at retry #%d", i)
 			break
+		} else {
+			b.print()
+			b.clearBox(b[0][3])
+			
 		}
+
 	}
 	b.print()
-
 }
 
 func TestGenCell(t *testing.T) {
